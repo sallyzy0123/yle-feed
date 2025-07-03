@@ -1,7 +1,8 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 use tauri::{
     menu::{Menu, MenuItem},
-    tray::TrayIconBuilder,
+    tray::{ TrayIconBuilder, TrayIconEvent},
+    Manager, Window,
 };
 
 #[tauri::command]
@@ -16,19 +17,39 @@ pub fn run() {
         .setup(|app| {
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&quit_i])?;
-            let _tray = TrayIconBuilder::new()
-            .icon(app.default_window_icon().unwrap().clone())
-            .menu(&menu)
-            .on_menu_event(|app, event| match event.id.as_ref() {
-                "quit" => {
-                    println!("quit menu item was clicked");
-                    app.exit(0);
+            
+            let app_handle = app.handle();
+            let icon = app.default_window_icon().unwrap().clone();
+            
+            let tray = TrayIconBuilder::new()
+                .icon(icon)
+                .menu(&menu)
+                .build(app)?;
+                
+            let app_handle_clone = app_handle.clone();
+            tray.on_tray_icon_event(move |_app_handle, event| {
+                match event {
+                    TrayIconEvent::Click { .. } => {
+                        // Single click - show window
+                        println!("Single click detected - showing window");
+                        if let Some(window) = app_handle_clone.get_webview_window("main") {
+                            if window.is_visible().unwrap() {
+                                window.hide().unwrap();
+                            } else {
+                                window.show().unwrap();
+                                window.set_focus().unwrap();
+                            }
+                        }
+                    }
+                    TrayIconEvent::DoubleClick { .. } => {
+                        // Double click detected - show quit menu
+                        println!("Double click detected - showing quit menu");
+                        // tray.show_menu().unwrap();
+                    }
+                    _ => {}
                 }
-                _ => {
-                    println!("menu item {:?} not handled", event.id);
-                }
-            })
-            .build(app)?;
+            });
+            
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![greet])
